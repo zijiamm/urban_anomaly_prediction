@@ -1,6 +1,7 @@
 import torch
 from time import time
 from gru import GRU
+import numpy as np
 
 CUDA_AVAILABLE = False
 DEVICE = None
@@ -10,6 +11,9 @@ if __name__ == '__main__':
     # system init and CUDA
 
     seed=980720
+    np.random.seed(seed)
+    torch.random.manual_seed(seed)
+
     CUDA_AVAILABLE = torch.cuda.is_available()
     if CUDA_AVAILABLE:
         torch.cuda.manual_seed_all(seed)
@@ -18,7 +22,11 @@ if __name__ == '__main__':
     print("|--           system init done.")
 
     # load data
-
+    adj, features, y_train, y_val, y_test, train_mask, val_mask, test_mask = load_data(args.dataset)
+    print('adj:', adj.shape)
+    print('features:', features.shape)
+    print('y:', y_train.shape, y_val.shape, y_test.shape)
+    print('mask:', train_mask.shape, val_mask.shape, test_mask.shape)
     # data extract
 
     # model and optimizer
