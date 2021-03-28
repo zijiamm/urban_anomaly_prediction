@@ -1,5 +1,6 @@
 #获取交通事故类型
 import csv
+import pandas as pd
 file_con = open("Traffic_Crashes_-_Crashes.csv","rb")
 csv_con = csv.reader(file_con)
 content = []
@@ -20,6 +21,37 @@ for crash_record in content:
 print("类型数：",crash_type.__len__())
 for c_type in crash_type:
 	print(c_type)
+    
+
+crime_all=['DECEPTIVE PRACTICE', 'CRIM SEXUAL ASSAULT', 'BURGLARY', 'THEFT', 'OFFENSE INVOLVING CHILDREN',
+           'CRIMINAL DAMAGE', 'OTHER OFFENSE', 'NARCOTICS', 'SEX OFFENSE', 'BATTERY', 'MOTOR VEHICLE THEFT',
+           'ROBBERY', 'ASSAULT', 'CRIMINAL TRESPASS', 'WEAPONS VIOLATION', 'OBSCENITY', 'PUBLIC PEACE VIOLATION',
+           'LIQUOR LAW VIOLATION', 'PROSTITUTION', 'INTIMIDATION', 'ARSON', 'INTERFERENCE WITH PUBLIC OFFICER',
+           'GAMBLING', 'STALKING', 'KIDNAPPING', 'OTHER NARCOTIC VIOLATION', 'CONCEALED CARRY LICENSE VIOLATION',
+           'HOMICIDE', 'RITUALISM', 'HUMAN TRAFFICKING', 'PUBLIC INDECENCY', 'OTHER OFFENSE ', 'NON-CRIMINAL',
+           'ESCAPE', 'OTHER STATE LAWS', 'INTOXICATED/IMPAIRED DRIVING', 'CRIMINAL MISCHIEF & RELATED OF',
+           'CRIMINAL MISCHIEF & RELATED OF', 'VEHICLE AND TRAFFIC LAWS', 'MISCELLANEOUS PENAL LAW', 'THEFT-FRAUD',
+           'POSSESSION OF STOLEN PROPERTY', 'NYS LAWS-UNCLASSIFIED FELONY', 'ANTICIPATORY OFFENSES',
+           'HOMICIDE-NEGLIGENT-VEHICLE', 'OFF. AGNST PUB ORD SENSBLTY &']
+path = '../data/NY/crime/crime_changed.csv'
+data = pd.read_csv(path,low_memory=False)
+y = data['OFNS_DESC']#读取类别列
+ny_ctype=y.drop_duplicates().tolist()
+print(ny_ctype.__len__())
+print(ny_ctype)
+
+chicago_ctype = ['DECEPTIVE PRACTICE', 'CRIM SEXUAL ASSAULT', 'BURGLARY', 'THEFT', 'OFFENSE INVOLVING CHILDREN',
+             'CRIMINAL DAMAGE', 'OTHER OFFENSE', 'NARCOTICS', 'SEX OFFENSE', 'BATTERY', 'MOTOR VEHICLE THEFT',
+             'ROBBERY', 'ASSAULT', 'CRIMINAL TRESPASS', 'WEAPONS VIOLATION', 'OBSCENITY', 'PUBLIC PEACE VIOLATION',
+             'LIQUOR LAW VIOLATION', 'PROSTITUTION', 'INTIMIDATION', 'ARSON', 'INTERFERENCE WITH PUBLIC OFFICER',
+             'GAMBLING', 'STALKING', 'KIDNAPPING', 'OTHER NARCOTIC VIOLATION', 'CONCEALED CARRY LICENSE VIOLATION',
+             'HOMICIDE', 'RITUALISM', 'HUMAN TRAFFICKING', 'PUBLIC INDECENCY', 'NON-CRIMINAL']
+print(set(chicago_ctype).issubset(set(crime_all)))
+print(set(ny_ctype).issubset(set(crime_all)))
+for elem in ny_ctype:
+    if elem not in crime_all:
+        print(elem)
+
 
 #获取犯罪事件类型
 import requests
