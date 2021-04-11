@@ -1,18 +1,23 @@
 
 import os
 import pandas as pd
+import functools
 import numpy as np
 import collections
+from datetime import datetime
 import random
 import torch
 import logging
+from urban_anomaly_prediction.ConsGraph import *
 # from CityTransfer.utility.utility_tool import _norm
 
+input_list = []
 
 class DataLoader(object):
     def __init__(self, args):
         self.args = args
-
+        self.source_youbiao = 0
+        self.target_youbiao = 0
         # define data path
         data_dir = os.path.join(args.data_dir, args.city_name)
         # dianping_data_path = os.path.join(data_dir, 'dianping.csv')
@@ -23,12 +28,25 @@ class DataLoader(object):
         # load dianping data,trans and crime data
         source_area_POI_data, target_area_POI_data, self.POI_category_dict, self.POI_category_dict_reverse, \
             = self.load_POI_data(POI_data_path)
+        # print("source_area_POI_data",source_area_POI_data)
+        # print("target_area_POI_data",target_area_POI_data)
+        # print("self.POI_category_dict",self.POI_category_dict)
+        # print("self.POI_category_dict_reverse",self.POI_category_dict_reverse)
+
         self.n_POI_category = len(self.POI_category_dict)
+        # print("self.n_POI_category",self.n_POI_category)
+
         print("[1 /10]       load POI data done.")
 
-        source_area_anomaly_data, target_area_anomaly_data, self.anomaly_category_dict, self.anomaly_category_dict_reverse, \
+        source_area_anomaly_data, target_area_anomaly_data, self.anomaly_category_dict, self.anomaly_category_dict_reverse,self.anomaly_id_time_dict \
             = self.load_anomaly_data(anomaly_data_path)
+        # print("source_area_anomaly_data",source_area_anomaly_data)
+        # print("target_area_anomaly_data",target_area_anomaly_data)
+        # print("self.anomaly_category_dict",self.anomaly_category_dict)
+        # print("self.anomaly_category_dict_reverse",self.anomaly_category_dict_reverse)
+
         self.n_anomaly_category = len(self.anomaly_category_dict)
+        # print("self.n_anomaly_category",self.n_anomaly_category)
 
         print("[2 /10]       load anomaly data done.")
 
@@ -41,6 +59,14 @@ class DataLoader(object):
         self.n_source_grid, self.n_target_grid, self.source_area_longitude_boundary, \
         self.source_area_latitude_boundary, self.target_area_longitude_boundary, self.target_area_latitude_boundary\
             = self.split_grid()
+        # print("self.n_source_grid",self.n_source_grid)
+        # print("self.n_target_grid",self.n_target_grid)
+        # print("self.source_area_longitude_boundary",self.source_area_longitude_boundary)
+        # print("self.source_area_latitude_boundary",self.source_area_latitude_boundary)
+        # print("self.target_area_longitude_boundary",self.target_area_longitude_boundary)
+        # print("self.target_area_latitude_boundary",self.target_area_latitude_boundary)
+
+
         print("[3 /10]       split grid done.")
 
         # distribute data into grids
@@ -48,6 +74,14 @@ class DataLoader(object):
         source_anomaly_data_dict, target_anomaly_data_dict, source_grid_anomaly_data, target_grid_anomaly_data\
             = self.distribute_data(source_area_POI_data, target_area_POI_data,source_area_anomaly_data, target_area_anomaly_data)
         print("[4 /10]       distribute data into grids done.")
+        # print("source_POI_data_dict",source_POI_data_dict)
+        # print("target_POI_data_dict",target_POI_data_dict)
+        # print("source_grid_POI_data",source_grid_POI_data)
+        # print("target_grid_POI_data",target_grid_POI_data)
+        # print("source_anomaly_data_dict",source_anomaly_data_dict)
+        # print("target_anomaly_data_dict",target_anomaly_data_dict)
+        # print("source_grid_anomaly_data",source_grid_anomaly_data)
+        # print("target_grid_anomaly_data",target_grid_anomaly_data)
 
         # generate rating matrix for Transfer Rating Prediction Model
         # self.source_rating_matrix, self.target_rating_matrix = self.generate_rating_matrix(source_grid_POI_data,
@@ -57,39 +91,317 @@ class DataLoader(object):
         # extract geographic features
         source_geographic_features, target_geographic_features = self.extract_geographic_features(source_POI_data_dict,
                                                                                                   target_POI_data_dict)
-        print("[6 /10]       extract geographic features done.")
+        print("[5 /10]       extract geographic features done.")
+        # print("source_geographic_features",source_geographic_features)
+        # print("target_geographic_features",target_geographic_features)
 
         # extract anomaly features
         source_anomaly_features, target_anomaly_features = \
             self.extract_anomaly_features(source_anomaly_data_dict, target_anomaly_data_dict)
-        print("[7 /10]       extract anomaly features done.")
-
+        print("[6 /10]       extract anomaly features done.")
+        # print("source_anomaly_features",source_anomaly_features)
+        # print("target_anomaly_features",target_anomaly_features)
         # combine features
         self.source_feature, self.target_feature, self.feature_dim = \
             self.combine_features(source_geographic_features, target_geographic_features,
                                   source_anomaly_features, target_anomaly_features)
-        print("[8 /10]       combine features done.")
+        print("[7 /10]       combine features done.")
+        # print("self.source_feature",self.source_feature)
+        # print("self.target_feature",self.target_feature)
+        # print("self.feature_dim",self.feature_dim)
 
-        # get PCCS and generate delta set
+        #
+        # # get PCCS and generate delta set
         self.PCCS_score, self.delta_source_grid, self.delta_target_grid = \
             self.generate_delta_set(self.source_feature, self.target_feature)
-        print("[9 /10]       get PCCS and generate delta set done.")
-        #
-        # # generate training and testing index
+        print("[8 /10]       get PCCS and generate delta set done.")
+        # print("self.PCCS_score",self.PCCS_score)
+        # print("self.delta_source_grid",self.delta_source_grid)
+        # print("self.delta_target_grid",self.delta_target_grid)
+        # #
+        # # # generate training and testing index
         self.source_grid_ids, self.target_grid_ids = self.generate_training_and_testing_index()
-        print("[10/10]       generate training and testing index done.")
-        #
+        print("[9/10]       generate training and testing index done.")
+        # print("self.source_grid_ids",self.source_grid_ids)
+        # print("self.target_grid_ids",self.target_grid_ids)
+        anomaly_type = input("input a anomaly type:\n")
+        #self.source_area_list,self.target_area_list = self.generate_area_list(anomaly_type,source_anomaly_data_dict)
+        self.source_feature_list, self.target_feature_list = self.generate_area_list(anomaly_type, source_anomaly_data_dict,self.anomaly_category_dict_reverse,self.anomaly_id_time_dict,self.source_feature\
+                                ,self.delta_target_grid,target_anomaly_data_dict,self.target_feature)
+        self.split_feature(self.source_feature_list, self.target_feature_list)
+        # #
         # # change data to tensor
-        # self.source_feature = torch.Tensor(self.source_feature)  # not sure
-        # self.target_feature = torch.Tensor(self.target_feature)  # not sure
+        self.source_feature = torch.Tensor(self.source_feature)  # not sure
+        self.target_feature = torch.Tensor(self.target_feature)  # not sure
+
+
+    def cmp(self,time1,time2):
+        format_pattern = "%m/%d/%Y %H:%M:%S"
+        #print(time1)
+        #print(time2)
+        time1 = datetime.strptime(time1[1], format_pattern)
+        time2 = datetime.strptime(time2[1], format_pattern)
+        if time2>time1:
+            return 1
+        else:
+            return -1
+    def split_feature(self,source_feature_list, target_feature_list):
+        #source_feature, target_feature, latest_source_feature, latest_target_feature = input[0], input[1], input[2],    input[3]
+        print("split_feature")
+        #print(len(source_feature_list))
+        #print(len(source_feature_list[0]))
+        print(len(target_feature_list))
+        print(len(target_feature_list[0]))
+        print(type(source_feature_list))
+        #print(target_feature_list)
+        source_list_1 = []
+        source_list_2 = []
+        for i in range(source_feature_list.__len__()):
+            if(i+11)>=source_feature_list.__len__():
+                source_list_1.append(source_feature_list[i:source_feature_list.__len__()-1])
+                source_list_2.append(source_feature_list[source_feature_list.__len__()-1:])
+                break
+            temp1 = source_feature_list[i:i+10]
+            temp2 = source_feature_list[i+11]
+            source_list_1.append(temp1)
+            source_list_2.append(temp2)
+        #print(source_list_1[:-1])
+        #print(source_list_2[:-1])
+        #print(source_list_1.__len__())
+        #print(source_list_2.__len__())
+        target_list_1 = []
+        target_list_2 = []
+        for i in range(target_feature_list.__len__()):
+            if(i+11)>=target_feature_list.__len__():
+                target_list_1.append(target_feature_list[i:target_feature_list.__len__()-1])
+                target_list_2.append(target_feature_list[target_feature_list.__len__()-1:])
+                break
+            temp1 = target_feature_list[i:i+10]
+            temp2 = target_feature_list[i+11]
+            target_list_1.append(temp1)
+            target_list_2.append(temp2)
+
+        print(target_list_1.__len__())
+        print(target_list_2.__len__())
+        global input_list
+        input_list.append(source_list_1)
+        input_list.append(source_list_2)
+        input_list.append(target_list_1)
+        input_list.append(target_list_2)
+
+    def generate_area_list(self,anomaly_type,source_anomaly_data_dict,anomaly_category_dict_reverse,anomaly_id_time_dict,source_feature\
+                           ,delta_target_grid,target_anomaly_data_dict,target_feature):
+        xiangsi_list = get_xiangsi(anomaly_type)[:3]
+
+        all_grid_id_list = list(source_anomaly_data_dict.keys())
+        source_grid_id_list = []
+        # [12, -74.0860273, 40.59187179, 7]
+        # 12:异常事件id 7:异常事件类型
+        for grid_id in all_grid_id_list:
+            for one_event in source_anomaly_data_dict[grid_id]:
+                event_name = anomaly_category_dict_reverse[one_event[3]]
+                if anomaly_type == event_name:
+                    source_grid_id_list.append(str(grid_id)+"#"+str(one_event[0]))
+        for xiangsi in xiangsi_list:
+            for grid_id in all_grid_id_list:
+                for one_event in source_anomaly_data_dict[grid_id]:
+                    event_name = anomaly_category_dict_reverse[one_event[3]]
+                    if xiangsi == event_name:
+                        source_grid_id_list.append(str(grid_id) + "#" + str(one_event[0]))
+        grid_id_and_time = {}
+        '''
+        对网格根据事件id的时间进行排序
+        '''
+
+        print(anomaly_id_time_dict)
+        for i in source_grid_id_list:
+            grid_id = i.split("#")[0]
+            event_id = int(i.split("#")[1])
+            #print(i[1])
+            event_time = anomaly_id_time_dict[event_id]
+            grid_id_and_time[grid_id]= event_time # 网格id->时间
+        #print(grid_id_and_time)
+        #print(source_grid_id_list)
+        #print(sorted(grid_id_and_time.items(), key=functools.cmp_to_key(self.cmp),reverse=True))
+        grid_id_and_time = sorted(grid_id_and_time.items(), key=functools.cmp_to_key(self.cmp),reverse=True)
+        #print(type(source_feature))
+
+        source_feature_list = []
+        for row in grid_id_and_time:
+            source_feature_list.append(source_feature[int(row[0]), :])
+        print("source_feature_list",source_feature_list)
+
+        #print(delta_target_grid)
+        #print(type(delta_target_grid))
+
+
+
+        target_grid_id_list = []
+        source_grid_id_list = []
+        source_grid = []
+        target_add_grid = []
+        target_output_grid = []
+
+        for grid_id in all_grid_id_list:
+            for one_event in source_anomaly_data_dict[grid_id]:
+                event_name = anomaly_category_dict_reverse[one_event[3]]
+                if anomaly_type == event_name:
+                    #source_grid_id_list.append(str(grid_id)+"#"+str(one_event[0]))
+                    if str(grid_id) not in source_grid:
+                        source_grid.append(grid_id)
+
+        for i in source_grid:
+            row = delta_target_grid[0, :][int(i), :]
+            for j in row:
+                if j not in target_add_grid:
+                    target_add_grid.append(j)
+
+        for i in target_add_grid:
+            for one_event in target_anomaly_data_dict[i]:
+                event_name = anomaly_category_dict_reverse[one_event[3]]
+                if anomaly_type == event_name:
+                    target_output_grid.append(str(i) + "#" + str(one_event[0]))
+        '''
+        根据时间排序
+        '''
+        grid_id_and_time = {}
+
+        for i in target_output_grid:
+            grid_id = i.split("#")[0]
+            event_id = int(i.split("#")[1])
+            #print(i[1])
+            event_time = anomaly_id_time_dict[event_id]
+            grid_id_and_time[grid_id]= event_time # 网格id->时间时间
+        grid_id_and_time = sorted(grid_id_and_time.items(), key=functools.cmp_to_key(self.cmp), reverse=True)
+
+        target_feature_list = []
+
+        grid_id_len= len(grid_id_and_time)
+        target_test_data_len = int((grid_id_len * 0.15))
+
+        remain_grid_id_len = grid_id_len - target_test_data_len
+
+
+        self.target_test_data_grid = []
+
+        '''
+        生成target_list用于生成训练数据
+        '''
+        for index in range(remain_grid_id_len):
+            row = grid_id_and_time[index]
+            target_feature_list.append(target_feature[int(row[0]), :])
+        print(target_feature_list.__len__())
+        '''
+        生成测试集对应的网格id
+        '''
+        self.target_test_data = []
+        self.id_list = []
+        for index in range(remain_grid_id_len,grid_id_len):
+            row = grid_id_and_time[index]
+            self.target_test_data.append(target_feature[int(row[0]), :])
+            self.id_list.append(int(row[0]))
+            #self.target_test_data_grid.append(int(row[0]))
+
+        self.target_list_1 = []
+        target_list_2 = []
+
+        for i in range(self.target_test_data.__len__()):
+            if(i+11)>=self.target_test_data.__len__():
+                self.target_list_1.append(self.target_test_data[i:self.target_test_data.__len__()-1])
+                target_list_2.append(self.target_test_data[self.target_test_data.__len__()-1:])
+                temp2_id = self.id_list[self.id_list.__len__()-1:]
+                self.target_test_data_grid.append(temp2_id)
+                break
+            temp1 = self.target_test_data[i:i+10]
+            temp2 = self.target_test_data[i+11]
+            temp2_id = self.id_list[i+11]
+            self.target_test_data_grid.append(temp2_id)
+            self.target_list_1.append(temp1)
+            target_list_2.append(temp2)
+
+        #for row in grid_id_and_time:
+        #    target_feature_list.append(target_feature[int(row[0]), :])
+
+
+
+        # print(source_feature_list)
+        #difference = (datetime.strptime(end_date, format_pattern) - datetime.strptime(start_date, format_pattern))
+        return source_feature_list, target_feature_list
+
+    def get_batch(self):
+        batch_data = {}
+        global input_list
+        source_all  = len(input_list[0])/32 # source一共有多少批数据
+        target_all = len(input_list[2])/32
+        #self.target_test_data = input_list[2][len(input_list[2])-self.target_test_all:]
+        source_list1 = input_list[0]
+        source_list2 = input_list[1]
+        target_list1 = input_list[2]
+        target_list2 = input_list[3]
+
+        self.source_score = []
+
+        if self.source_youbiao < source_all:
+            batch_data["feature_list"] = source_list1[32*self.source_youbiao:(self.source_youbiao+1)*32]
+            batch_data["latest_feature"] = source_list2[32*self.source_youbiao:(self.source_youbiao+1)*32]
+
+            for i in range(len(batch_data["feature_list"])):
+                self.source_score.append(1)
+            batch_data["score"] = self.source_score
+        #a= [[[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]....],[[1,1,1,1],[1,1,1,1],[1,1,1,1],[1,1,1,1]....]] 32个0-9 三维数组
+        #b= [[1,1,1,1,1,1.....],[1,1,1,1,1....]] 32个10 二维数组
+        #[1,1,1,...] 32个1 一维数组
+        #(a,b,c)
+        #[a,b,c]
+        #model((a,b,c))
+        #mode([a,b,c])
+
+        if self.source_youbiao == source_all:
+            batch_data["feature_list"] = source_list1[32 * self.source_youbiao:]
+            batch_data["latest_feature"] = source_list2[32 * self.source_youbiao:]
+
+            for i in range(len(batch_data["feature_list"])):
+                self.source_score.append(1)
+
+            batch_data["score"] = self.source_score
+
+        self.source_youbiao = self.source_youbiao + 1
+
+        if self.source_youbiao > source_all:
+            self.target_score = []
+            if self.target_youbiao < target_all:
+                batch_data["feature_list"] = target_list1[32*self.target_youbiao:(self.target_youbiao+1)*32]
+                batch_data["latest_feature"] = target_list2[32*self.target_youbiao:(self.target_youbiao+1)*32]
+
+                for i in range(len(batch_data["feature_list"])):
+                    self.target_score.append(1)
+
+                batch_data["score"] = self.target_score
+
+            if self.target_youbiao == target_all:
+                batch_data["feature_list"] = target_list1[32 * self.target_youbiao:]
+                batch_data["latest_feature"] = target_list2[32 * self.target_youbiao:]
+
+                for i in range(len(batch_data["feature_list"])):
+                    self.target_score.append(1)
+
+                batch_data["score"] = self.target_score
+
+            self.target_youbiao = self.target_youbiao + 1
+
+
+            if self.target_youbiao > target_all:
+                batch_data["feature_list"] = ""
+                batch_data["latest_feature"] = ""
+
+
+        #yield batch_data
+        #batch_data = {}
+
+        return batch_data
 
     def load_POI_data(self, POI_data_path):
         POI_data = pd.read_csv(POI_data_path, usecols=[0, 2, 3, 7, 13])
-        # POI_data = POI_data[POI_data['status'] == 0].drop(columns='status')  # 筛出正常营业的店铺
-        # POI_data['branchname'].fillna("-1", inplace=True)  # 将 branch name 为空值用0填充
-        # POI_data.drop_duplicates(subset=['name', 'longitude', 'latitude'],
-        #                               keep='first', inplace=True)  # 利用 名称+经纬度 去重
-
         # remap category to id
         POI_category_name = POI_data['category id 1'].unique()
         POI_category_dict = dict()
@@ -119,12 +431,13 @@ class DataLoader(object):
         return source_area_POI_data, target_area_POI_data, POI_category_dict, POI_category_dict_reverse
 
     def load_anomaly_data(self, anomaly_data_path):
-        anomaly_data = pd.read_csv(anomaly_data_path, usecols=[0,1,2,3])
-        # POI_data = POI_data[POI_data['status'] == 0].drop(columns='status')  # 筛出正常营业的店铺
-        # POI_data['branchname'].fillna("-1", inplace=True)  # 将 branch name 为空值用0填充
-        # POI_data.drop_duplicates(subset=['name', 'longitude', 'latitude'],
-        #                               keep='first', inplace=True)  # 利用 名称+经纬度 去重
+        anomaly_id_time_dict = {}
 
+        anomaly_data = pd.read_csv(anomaly_data_path, usecols=[0,1,2,3,5,6])
+
+        anomaly_data["id"] = anomaly_data["id"].astype('int')
+        anomaly_data["CMPLNT_FR_DT"] = anomaly_data["CMPLNT_FR_DT"].astype('str')
+        anomaly_data["CMPLNT_FR_TM"] = anomaly_data["CMPLNT_FR_TM"].astype('str')
         # remap category to id
         anomaly_category_name = anomaly_data['OFNS_DESC'].unique()
         anomaly_category_dict = dict()
@@ -150,8 +463,13 @@ class DataLoader(object):
             elif self.args.target_area_coordinate[0] <= row.longitude <= self.args.target_area_coordinate[1] \
                     and self.args.target_area_coordinate[2] <= row.latitude <= self.args.target_area_coordinate[3]:
                 target_area_anomaly_data.append(list(row)[1:])
-
-        return source_area_anomaly_data, target_area_anomaly_data, anomaly_category_dict, anomaly_category_dict_reverse
+        for index, row in anomaly_data.iterrows():
+            id = row['id']
+            date = row['CMPLNT_FR_DT']
+            time = row['CMPLNT_FR_TM']
+            date_time = date + " " + time
+            anomaly_id_time_dict[id] = date_time
+        return source_area_anomaly_data, target_area_anomaly_data, anomaly_category_dict, anomaly_category_dict_reverse,anomaly_id_time_dict
 
     # def check_enterprise(self, source_area_data, target_area_data):
     #     #  columns = ['shop_id', 'name', 'big_category', 'small_category',
@@ -418,8 +736,10 @@ class DataLoader(object):
                          source_anomaly_features, target_anomaly_features):
         source_feature = np.concatenate((source_geographic_features, source_anomaly_features), axis=1)
         target_feature = np.concatenate((target_geographic_features, target_anomaly_features), axis=1)
+        #print("soutrce",source_feature)
 
         feature_dim = source_feature.shape[1]
+        print("所有网格的特征??",len(target_feature))
 
         # enterprise size * grid size * feature size
         return source_feature, target_feature, feature_dim
@@ -440,10 +760,11 @@ class DataLoader(object):
                 for idx, name in enumerate(self.args.enterprise):
                     if item[1] == name:
                         target_rating_matrix[idx][grid_id] += item[6]
-        # score_max = max(np.max(source_rating_matrix), np.max(target_rating_matrix))
-        # score_min = min(np.min(source_rating_matrix), np.min(target_rating_matrix))
-        # source_rating_matrix = _norm(source_rating_matrix, score_max, score_min) * 5
-        # target_rating_matrix = _norm(target_rating_matrix, score_max, score_min) * 5
+        def _norm(data, mmax, mmin):
+            if mmax == mmin:
+                return 0
+            else:
+                return (data - mmin) / (mmax - mmin)
 
         source_rating_matrix = _norm(source_rating_matrix, self.args.score_norm_max, 0) * 5
         target_rating_matrix = _norm(target_rating_matrix, self.args.score_norm_max, 0) * 5
@@ -472,6 +793,7 @@ class DataLoader(object):
         score = torch.Tensor(score)
 
         delta_source_grid = [[[] for _ in range(self.n_source_grid)] for _ in self.args.anomaly]
+        print("delta_source_grid",delta_source_grid)
         delta_target_grid = [[[] for _ in range(self.n_target_grid)] for _ in self.args.anomaly]
 
         for idx, _ in enumerate(self.args.anomaly):
@@ -485,6 +807,9 @@ class DataLoader(object):
                 sorted_index = np.argsort(-score[idx][:, target_grid_id])
                 for k in range(min(self.args.gamma, self.n_source_grid)):
                     delta_target_grid[idx][target_grid_id].append(sorted_index[k])
+        #print("delta_target_grid",delta_target_grid)
+        #print("len", len(delta_target_grid))
+        #print(len(delta_target_grid[0]))
         # for idx in self.portion_enterprise_index:
         #     for target_grid_id in range(self.n_target_grid):
         #         sorted_index = np.argsort(-score[idx][:, target_grid_id])
@@ -493,7 +818,7 @@ class DataLoader(object):
 
         delta_source_grid = np.array(delta_source_grid)
         delta_target_grid = np.array(delta_target_grid)
-
+        #print("delta_target_grid",delta_target_grid)
         return score, delta_source_grid, delta_target_grid
 
     def generate_training_and_testing_index(self):
@@ -545,10 +870,14 @@ class DataLoader(object):
             exit(1)
         return feature, score
 
-    def get_feature_and_rel_score_for_evaluate(self, grid_index):
-        feature = self.target_feature[self.target_enterprise_index, grid_index]
-        score = self.target_rating_matrix[self.target_enterprise_index, grid_index]
-        return feature, score
+    def get_feature_and_rel_score_for_evaluate(self):
+
+        # target_data_test = self.target_test_data
+
+        feature = self.target_list_1
+        ground_truth_grid = self.target_test_data_grid
+        ground_truth_grid = ground_truth_grid[:-1]
+        return feature, ground_truth_grid
 
     def get_grid_coordinate_rectangle_by_grid_id(self, grid_id, grid_type):
         if grid_type == 's':
