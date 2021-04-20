@@ -188,6 +188,7 @@ class DataLoader(object):
         input_list.append(source_list_2)
         input_list.append(target_list_1)
         input_list.append(target_list_2)
+        #input_list.append(target_feature_list)
 
     def generate_area_list(self,anomaly_type,source_anomaly_data_dict,anomaly_category_dict_reverse,anomaly_id_time_dict,source_feature\
                            ,delta_target_grid,target_anomaly_data_dict,target_feature):
@@ -277,7 +278,7 @@ class DataLoader(object):
         target_feature_list = []
 
         grid_id_len= len(grid_id_and_time)
-        target_test_data_len = int((grid_id_len * 0.15))
+        target_test_data_len = int((grid_id_len * 0.20))
 
         remain_grid_id_len = grid_id_len - target_test_data_len
 
@@ -296,6 +297,8 @@ class DataLoader(object):
         '''
         self.target_test_data = []
         self.id_list = []
+        print("qaz1")
+        print(grid_id_and_time)
         for index in range(remain_grid_id_len,grid_id_len):
             row = grid_id_and_time[index]
             self.target_test_data.append(target_feature[int(row[0]), :])
@@ -304,17 +307,18 @@ class DataLoader(object):
 
         self.target_list_1 = []
         target_list_2 = []
-
+        print('self.target_test_data.__len__()=========================')
+        print(self.target_test_data.__len__())
         for i in range(self.target_test_data.__len__()):
             if(i+11)>=self.target_test_data.__len__():
                 self.target_list_1.append(self.target_test_data[i:self.target_test_data.__len__()-1])
                 target_list_2.append(self.target_test_data[self.target_test_data.__len__()-1:])
-                temp2_id = self.id_list[self.id_list.__len__()-1:]
+                temp2_id = self.id_list[self.id_list.__len__()-1]
                 self.target_test_data_grid.append(temp2_id)
                 break
             temp1 = self.target_test_data[i:i+10]
-            temp2 = self.target_test_data[i+11]
-            temp2_id = self.id_list[i+11]
+            temp2 = self.target_test_data[i+10]
+            temp2_id = self.id_list[i+10]
             self.target_test_data_grid.append(temp2_id)
             self.target_list_1.append(temp1)
             target_list_2.append(temp2)
@@ -744,37 +748,6 @@ class DataLoader(object):
         # enterprise size * grid size * feature size
         return source_feature, target_feature, feature_dim
 
-    def generate_rating_matrix(self, source_grid_enterprise_data, target_grid_enterprise_data):
-        # columns = ['shop_id', 'name', 'big_category', 'small_category',
-        #             'longitude', 'latitude', 'review_count', 'branchname']
-        source_rating_matrix = np.zeros((len(self.args.enterprise), self.n_source_grid))
-        target_rating_matrix = np.zeros((len(self.args.enterprise), self.n_target_grid))
-        for grid_id in range(self.n_source_grid):
-            for item in source_grid_enterprise_data[grid_id]:
-                for idx, name in enumerate(self.args.enterprise):
-                    if item[1] == name:
-                        source_rating_matrix[idx][grid_id] += item[6]
-
-        for grid_id in range(self.n_target_grid):
-            for item in target_grid_enterprise_data[grid_id]:
-                for idx, name in enumerate(self.args.enterprise):
-                    if item[1] == name:
-                        target_rating_matrix[idx][grid_id] += item[6]
-        def _norm(data, mmax, mmin):
-            if mmax == mmin:
-                return 0
-            else:
-                return (data - mmin) / (mmax - mmin)
-
-        source_rating_matrix = _norm(source_rating_matrix, self.args.score_norm_max, 0) * 5
-        target_rating_matrix = _norm(target_rating_matrix, self.args.score_norm_max, 0) * 5
-
-        source_rating_matrix = torch.Tensor(source_rating_matrix)
-        target_rating_matrix = torch.Tensor(target_rating_matrix)
-        res0 = torch.sort(target_rating_matrix[0], descending=True)
-        res1 = torch.sort(target_rating_matrix[1], descending=True)
-
-        return source_rating_matrix, target_rating_matrix
 
     def generate_delta_set(self, source_feature, target_feature):
         # Equation (13)
@@ -875,8 +848,10 @@ class DataLoader(object):
         # target_data_test = self.target_test_data
 
         feature = self.target_list_1
+
         ground_truth_grid = self.target_test_data_grid
-        ground_truth_grid = ground_truth_grid[:-1]
+        print('test-----------feature',feature.__len__())
+        print('test-----------ground_truth_grid', ground_truth_grid)
         return feature, ground_truth_grid
 
     def get_grid_coordinate_rectangle_by_grid_id(self, grid_id, grid_type):
