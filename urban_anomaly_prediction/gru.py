@@ -34,7 +34,7 @@ class AutoEncoder(nn.Module):
 class GRU(nn.Module):
     def __init__(self, feature_dim):
         super(GRU, self).__init__()
-        self.gruS = nn.GRU(input_size=feature_dim, hidden_size=feature_dim)
+        self.gruS = nn.GRU(input_size=feature_dim, hidden_size=feature_dim, batch_first=True)
         # self.gruT = nn.GRU(input_size=feature_dim, hidden_size=feature_dim)
         self.fc1 = nn.Sequential(
             nn.Linear(434, 2 * feature_dim),
@@ -60,16 +60,15 @@ class GRU(nn.Module):
         encode_s, decode_s = self.auto_encoder[0](source_feature_list1)
         # encode_t, decode_t = self.auto_encoder[0](target_feature_list1)
 
-        pref1 = self.gruS(encode_s)
+        pref1,hidden = self.gruS(encode_s)
+        print(hidden.shape)
+        userPref = torch.squeeze(hidden, 0)
+        print(userPref.shape)
         # pref2 = self.gruT(encode_t)
         # print(pref1)
-
-        pref1 = pref1[0]
-        # pre1是32*10*64 latest_source_feature是32*370
-        pref1 = pref1[:,-1,:]
-        print(pref1.shape)
+        print(latest_source_feature.shape)
 #        latest_source_feature = torch.from_numpy(latest_source_feature)
-        pref1 = torch.cat([pref1, latest_source_feature], dim=-1)
+        pref1 = torch.cat([userPref, latest_source_feature], dim=-1)
         print(pref1.shape)
         # print(type(pref1))
         # pref2 = torch.cat([pref2, latest_source_feature], dim=-1)
