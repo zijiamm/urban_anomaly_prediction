@@ -44,22 +44,6 @@ def system_init(system_args):
     pd.set_option('display.max_columns', None)
 
 
-def softmax(X):
-    """
-    softmax函数实现
-
-
-    返回：
-    softmax计算结果
-    """
-    assert (len(X.shape) == 2)
-    row_max = np.max(X, axis=axis).reshape(-1, 1)
-    X -= row_max
-    X_exp = np.exp(X)
-    s = X_exp / np.sum(X_exp, axis=axis, keepdims=True)
-
-    return s
-
 
 if __name__ == '__main__':
     # get args and init
@@ -101,12 +85,9 @@ if __name__ == '__main__':
 
     # training
     logging.info("[!]-----------start training.")
-    tr1ple = 0
-    mzj = 0
     for epoch in range(args.n_epoch):
         model.train()
-        iter_total_loss = 0
-        # print("sssssssssssssssssssssssssss",len(source_batch))
+        iter_total_loss = 0.0
         for batch_iter in range(len(source_batch)):
             batch_data = data.get_batch()
             if batch_data["feature_list"] == "":
@@ -115,11 +96,9 @@ if __name__ == '__main__':
             time_iter = time.time()
 
             optimizer.zero_grad()
-            batch_total_loss = 0
+            batch_total_loss = 0.0
 
             # 二十个一等份 batch=32 (0~20,21)(1~21,22)...
-
-
             batch_data["feature_list"] = torch.tensor(batch_data["feature_list"])
             batch_data["feature_list"]  = batch_data["feature_list"].to(torch.float32)
             batch_data["feature_list"] = batch_data["feature_list"].cuda()
@@ -128,14 +107,13 @@ if __name__ == '__main__':
             #batch_data["latest_feature"] = batch_data["latest_feature"].to(torch.float32)
             #batch_data["latest_feature"] = batch_data["latest_feature"].cuda()
 
-
             try:
                 batch_data["latest_feature"] = torch.tensor(batch_data["latest_feature"])
                 batch_data["latest_feature"] = batch_data["latest_feature"].to(torch.float32)
                 batch_data["latest_feature"] = batch_data["latest_feature"].cuda()
 
             except:
-                print("tr1ple==", tr1ple)
+                print("有点问题")
                 print(len(batch_data["feature_list"]))
                 print(type(batch_data["feature_list"][0]))
                 print(len(batch_data["score"]))
@@ -151,46 +129,21 @@ if __name__ == '__main__':
                 batch_data["latest_feature"] = batch_data["latest_feature"].to(torch.float32)
                 batch_data["latest_feature"] = batch_data["latest_feature"].cuda()
 
-                '''
-                print("tr1ple==",tr1ple)
 
-                print(type(batch_data["latest_feature"]))
-                print(len(batch_data["latest_feature"]))
-                #print(type(batch_data["latest_feature"][0])) # ndarray
-                for i in batch_data["latest_feature"]:
-                    if isinstance(i,list):
-                        print(i)
-                        print(type(i))
-                    else:
-                        print(i.shape) # 序列长度370
 
-                '''
                 #print("这条数据不太对",batch_data["latest_feature"])
 
-            '''
-            if tr1ple == 0:
-                print("tr1ple==0")
-                print(type(batch_data["latest_feature"]))
-                print(len(batch_data["latest_feature"]))
-                print(type(batch_data["latest_feature"][0]))
-                print(batch_data["latest_feature"][0]) #序列长度370
-            '''
-            tr1ple = tr1ple + 1
             batch_data["score"] = torch.tensor(batch_data["score"])
             batch_data["score"]  = batch_data["score"].to(torch.long)
 
             batch_data["score"] = batch_data["score"].cuda()
-            if mzj == 0:
-                print("mzj")
-                print(batch_data["feature_list"].shape)
-                print(batch_data["latest_feature"].shape)
-            mzj = mzj+1
+
             # Torch.tensor(a,b,c,d, score_source, score_target);
             # a,b,c,d,s_score, t_score = a.cuda(),b.cuda()...
             # 输入source_data
             decode_s, pref1= model(batch_data["feature_list"], batch_data["latest_feature"])
             # feature_list：torch.Size([32, 10, 370]) latest_feature：torch.Size([32, 370])
-
+            pref1 = F.log_softmax(pref1, dim=1)
             # 输入target_data
             # decode_t, pref2, = model(batch_data["feature_list"], batch_data["latest_feature"])
             Loss1 = nn.MSELoss().cuda()
@@ -212,42 +165,63 @@ if __name__ == '__main__':
             loss.backward()
 
             optimizer.step()
-
+            batch_total_loss += loss.item()
+            iter_total_loss += loss.item()
             if DEBUG and (batch_iter % args.print_every) == 0:
-                logging.info('Training: Epoch {:04d} / {:04d} | Iter {:04d} / {:04d} | Time {:.1f}s '
+                print('Training: Epoch {:04d} / {:04d} | Iter {:04d} / {:04d} | Time {:.1f}s '
                              '| Iter Loss {:.4f} | Iter Mean Loss {:.4f}'.
                              format(epoch, args.n_epoch, batch_iter, len(source_batch) - 1, time.time() - time_iter,
                                     batch_total_loss, iter_total_loss / (batch_iter + 1)))
 
     # testing
     logging.info("[!]-----------start testing.")
+    print("test*************************")
     model.eval()
-    sum = 0
-    correct = 0
-    tr1ple = 0
+    sum = 0.0
+    correct = 0.0
     with torch.no_grad():
         # 返回一个序列，还有ground_truth grid
         feature,ground_truth_grid_id = data.get_feature_and_rel_score_for_evaluate()
-        sum += 1
+        aaa=[]
+        for i in ground_truth_grid_id:
+            aaa.append(data.target_feature[i])
         # scoreList = []
         feature_len = len(feature)
-        target_feature_len = len(data.target_feature)
-
+        # target_feature_len = len(data.target_feature)
+        random_target_feature_len = 100 - feature_len
+        random_target_feature = random.choices(data.target_feature, k = random_target_feature_len)
+        iop = 0
+        print("qaz")
+        for a in aaa:
+            if iop==0:
+                print(a.shape)
+                print(type(aaa))
+                iop = iop + 1
+            # if a not in random_target_feature:
+            random_target_feature.append(a)
+        print(len(random_target_feature))
+        print(random_target_feature[0].shape)
+        #random_target_feature = random_target_feature
+        #random_target_feature = torch.tensor(random_target_feature)
+        random_target_feature = torch.tensor([item.cpu().detach().numpy() for item in random_target_feature]).cuda()
         for i in range(feature_len):
+            sum += 1
             temp_feature = feature[i]
             #temp_feature = np.repeat(temp_feature,target_feature_len,axis=0)
-            temp_feature =  np.expand_dims(temp_feature,0).repeat(target_feature_len,axis=0)
+            # temp_feature = np.expand_dims(temp_feature, 0).repeat(len(data.target_feature), axis=0)
+            temp_feature = np.expand_dims(temp_feature,0).repeat(100,axis=0)
             temp_feature = torch.tensor(temp_feature)
             temp_feature = temp_feature.to(torch.float32)
             temp_feature = temp_feature.to(DEVICE)
-            o1, o2 = model(temp_feature, data.target_feature)
+            o1, o2 = model(temp_feature, random_target_feature)
+            # o1, o2 = model(temp_feature, data.target_feature)
             o2 = F.softmax(o2,dim=1)
             baseScore = torch.LongTensor([0,1]).cuda()
             scoreList = torch.sum(o2 * baseScore, dim=1)
         # scoreList = scoreList.tensor()
-        values_5, indices_5 = torch.topk(scoreList, 10000)
-        indices_5 = indices_5.cpu().numpy()
-        for grid_id in ground_truth_grid_id:
-            if grid_id in indices_5:
+            values_5, indices_5 = torch.topk(scoreList, 100)
+            indices_5 = indices_5.cpu().numpy()
+
+            if ground_truth_grid_id[i] in indices_5:
                 correct += 1
-    print("准确率为",correct/sum)
+        print("准确率为",correct/sum)
